@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Apply Leave</title>
+    <style>
+        :root {
+            --moss-dark: #3D4127;
+            --moss-green: #636B2F;
+            --moss-light: #BAC095;
+            --moss-pale: #D4DE95;
+        }
+        
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: var(--moss-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            padding: 35px;
+            border-radius: 16px;
+            width: 350px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            border: 2px solid var(--moss-green);
+        }
+        
+        h2 {
+            color: var(--moss-dark);
+            font-size: 28px;
+            margin-top: 0;
+            margin-bottom: 25px;
+            text-align: center;
+            font-weight: 500;
+        }
+        
+        label {
+            display: block;
+            margin-top: 15px;
+            color: var(--moss-dark);
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid var(--moss-light);
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: 'Times New Roman', Times, serif;
+            box-sizing: border-box;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--moss-green);
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            margin: 15px 0 8px;
+            background-color: var(--moss-green);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: 'Times New Roman', Times, serif;
+            border: 1px solid var(--moss-dark);
+        }
+        
+        button:hover {
+            background-color: var(--moss-dark);
+        }
+        
+        .back {
+            background-color: var(--moss-pale);
+            color: var(--moss-dark);
+            border: 1px solid var(--moss-green);
+        }
+        
+        .back:hover {
+            background-color: var(--moss-light);
+        }
+        
+        .success {
+            background-color: var(--moss-pale);
+            color: var(--moss-dark);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 2px solid var(--moss-green);
+            font-size: 16px;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 2px solid #f5c6cb;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Apply Leave</h2>
+        
+        {% if success %}
+            <div class="success">Leave applied successfully!</div>
+        {% endif %}
+        
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        
+        <form method="post">
+            {% csrf_token %}
+            <label>Leave Type:</label>
+            <select name="leave_type">
+                <option value="SL">Sick Leave</option>
+                <option value="PL">Paid Leave</option>
+                <option value="CL">Casual Leave</option>
+            </select>
+            
+            <label>Date:</label>
+            <input type="date" name="date" required min="{% now 'Y-m-d' %}">
+            
+            <label>Reason:</label>
+            <textarea name="reason" rows="3" required></textarea>
+            
+            <button type="submit">Apply</button>
+        </form>
+        
+       {% if user.username == 'ray' %}
+          <a href="{% url 'admin_dashboard' %}"><button class="back">Back</button></a>
+       {% else %}
+          <a href="{% url 'user_dashboard' %}"><button class="back">Back</button></a>
+        {% endif %}
+        
+    </div>
+</body>
+</html>

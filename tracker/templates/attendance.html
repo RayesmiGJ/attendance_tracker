@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mark Attendance</title>
+    <style>
+        :root {
+            --moss-dark: #3D4127;
+            --moss-green: #636B2F;
+            --moss-light: #BAC095;
+            --moss-pale: #D4DE95;
+        }
+        
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: var(--moss-light);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            width: 350px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            border: 2px solid var(--moss-green);
+        }
+        
+        h2 {
+            color: var(--moss-dark);
+            font-size: 28px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        
+        p {
+            font-size: 18px;
+            color: var(--moss-green);
+            background-color: var(--moss-pale);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        
+        button {
+            padding: 12px 25px;
+            background-color: var(--moss-green);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 16px;
+            font-family: 'Times New Roman', Times, serif;
+            transition: 0.2s;
+            border: 1px solid var(--moss-dark);
+        }
+        
+        button:hover {
+            background-color: var(--moss-dark);
+        }
+        
+        .error {
+            color: #a94442;
+            background-color: #f2dede;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #ebccd1;
+        }
+        
+        .back {
+            background-color: var(--moss-pale);
+            color: var(--moss-dark);
+            border: 1px solid var(--moss-green);
+        }
+        
+        .back:hover {
+            background-color: var(--moss-light);
+        }
+        
+        form {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Mark Attendance</h2>
+        <p>Date: {% now "F j, Y" %}</p>
+        
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% else %}
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit">Mark Present</button>
+            </form>
+        {% endif %}
+        
+        {% if user.username == 'ray' %}
+          <a href="{% url 'admin_dashboard' %}"><button class="back">Back</button></a>
+       {% else %}
+          <a href="{% url 'user_dashboard' %}"><button class="back">Back</button></a>
+        {% endif %}
+    </div>
+</body>
+</html>

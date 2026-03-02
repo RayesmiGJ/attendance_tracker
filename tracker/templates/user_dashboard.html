@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Dashboard</title>
+    <style>
+        :root {
+            --moss-dark: #3D4127;
+            --moss-green: #636B2F;
+            --moss-light: #BAC095;
+            --moss-pale: #D4DE95;
+        }
+        
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: var(--moss-light);
+            margin: 0;
+            padding: 30px;
+        }
+        
+        .header {
+            background-color: var(--moss-dark);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+        }
+        
+        .header h2 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 500;
+        }
+        
+        .header a {
+            background-color: var(--moss-pale);
+            color: var(--moss-dark);
+            text-decoration: none;
+            padding: 8px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            border: none;
+        }
+        
+        .header a:hover {
+            background-color: #e5e9c5;
+        }
+        
+        .menu {
+            max-width: 800px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        .menu a {
+            background-color: white;
+            color: var(--moss-dark);
+            text-decoration: none;
+            padding: 30px 20px;
+            border-radius: 12px;
+            font-size: 20px;
+            border: 2px solid var(--moss-green);
+            text-align: center;
+            transition: 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .menu a:hover {
+            background-color: var(--moss-green);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>User Dashboard - {{ user.username }}</h2>
+        <a href="{% url 'logout' %}">Logout</a>
+    </div>
+    
+    <div class="menu">
+        <a href="{% url 'attendance' %}">Mark Attendance</a>
+        <a href="{% url 'view_attendance' %}">View Attendance</a>
+        <a href="{% url 'wfh' %}">Apply Work From Home</a>
+        <a href="{% url 'leave' %}">Apply Leave</a>
+    </div>
+</body>
+</html>
