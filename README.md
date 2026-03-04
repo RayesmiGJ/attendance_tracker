@@ -20,6 +20,6 @@
 > python manage.py createsuperuser -> Creates an admin account for django admin 
 
 -----Admin panel access-----
-admin username -> ray
+admin username -> xavier
 admin password -> sxcce123
 admin URL: http://127.0.0.1:8000/admin
