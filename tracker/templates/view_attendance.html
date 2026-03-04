@@ -18,7 +18,7 @@
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             padding: 30px;
@@ -34,64 +34,166 @@
             margin-bottom: 25px;
             font-weight: 500;
             text-align: center;
+            border-bottom: 2px solid var(--moss-light);
+            padding-bottom: 15px;
+        }
+        
+        .filter-section {
+            background-color: var(--moss-pale);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 1px solid var(--moss-green);
+        }
+        
+        .filter-row {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        
+        .filter-item {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .filter-item label {
+            display: block;
+            color: var(--moss-dark);
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 15px;
+        }
+        
+        .filter-item input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid var(--moss-green);
+            border-radius: 8px;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 15px;
+            background-color: white;
+            box-sizing: border-box;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 2px;
+        }
+        
+        .btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        
+        .btn-primary {
+            background-color: var(--moss-green);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--moss-dark);
+        }
+        
+        .btn-secondary {
+            background-color: white;
+            color: var(--moss-dark);
+            border: 1px solid var(--moss-green);
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--moss-light);
+        }
+        
+        .summary-box {
+            background-color: var(--moss-pale);
+            padding: 12px 18px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: var(--moss-dark);
+            font-size: 16px;
         }
         
         table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 25px;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
         }
         
         th {
             background-color: var(--moss-green);
             color: white;
-            padding: 15px 10px;
+            padding: 15px 12px;
             font-size: 18px;
             font-weight: 500;
+            text-align: left;
         }
         
         td {
-            padding: 12px 10px;
-            text-align: left;
+            padding: 12px 12px;
             border-bottom: 1px solid var(--moss-light);
             font-size: 16px;
+            background-color: white;
         }
         
-        tr:last-child td {
-            border-bottom: none;
-        }
-        
-        tr:hover {
+        tr:hover td {
             background-color: var(--moss-pale);
         }
         
         .present {
-            color: var(--moss-dark);
+            color: #2d6a4f;
             font-weight: 500;
         }
         
         .present::before {
             content: "✓ ";
-            color: var(--moss-green);
-            font-weight: bold;
+            color: #2d6a4f;
         }
         
-        .back {
+        .leave {
+            color: #b02a37;
+            font-weight: 500;
+        }
+        
+        .leave::before {
+            content: "✗ ";
+            color: #b02a37;
+        }
+        
+        .wfh {
+            color: #7b4f2d;
+            font-weight: 500;
+        }
+        
+        .details {
+            color: var(--moss-dark);
+            font-size: 14px;
+        }
+        
+        .back-btn {
+            display: inline-block;
             background-color: var(--moss-pale);
             color: var(--moss-dark);
             padding: 12px 25px;
             text-decoration: none;
             border-radius: 8px;
-            display: inline-block;
-            margin-top: 10px;
             border: 2px solid var(--moss-green);
             font-size: 16px;
-            transition: 0.2s;
+            margin-top: 15px;
         }
         
-        .back:hover {
+        .back-btn:hover {
             background-color: var(--moss-green);
             color: white;
         }
@@ -99,37 +201,75 @@
         .no-records {
             text-align: center;
             color: var(--moss-dark);
-            font-style: italic;
-            padding: 20px;
+            padding: 30px;
             background-color: var(--moss-pale);
             border-radius: 8px;
+            font-size: 16px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Your Attendance Records</h2>
+        <h2>Attendance Records</h2>
+        
+        <div class="filter-section">
+            <form method="get">
+                <div class="filter-row">
+                    <div class="filter-item">
+                        <label>From Date</label>
+                        <input type="date" name="from_date" value="{{ request.GET.from_date }}">
+                    </div>
+                    <div class="filter-item">
+                        <label>To Date</label>
+                        <input type="date" name="to_date" value="{{ request.GET.to_date }}">
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="{% url 'view_attendance' %}" class="btn btn-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        {% if from_date and to_date %}
+            <div class="summary-box">
+                Showing: {{ from_date }} to {{ to_date }}
+            </div>
+        {% endif %}
         
         <table>
             <tr>
                 <th>Date</th>
                 <th>Status</th>
+                <th>Details</th>
             </tr>
-            {% for record in records %}
+            {% for record in all_records %}
             <tr>
-                <td>{{ record.date }}</td>
-                <td class="present">Present</td>
+                <td>{{ record.date|date:"M d, Y" }}</td>
+                <td class="{% if record.status == 'Present' %}present{% elif record.status == 'Leave' %}leave{% else %}wfh{% endif %}">
+                    {{ record.status }}
+                </td>
+                <td class="details">
+                    {% if record.status == 'Leave' %}
+                        {{ record.leave_type }} - {{ record.reason }}
+                    {% elif record.status == 'WFH' %}
+                        {% if record.from_date and record.to_date %}
+                            {{ record.from_date|date:"M d" }} to {{ record.to_date|date:"M d, Y" }}
+                        {% endif %}
+                    {% endif %}
+                </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="2" class="no-records">No records found</td>
+                <td colspan="3" class="no-records">No records found</td>
             </tr>
             {% endfor %}
         </table>
+        
         {% if user.username == 'ray' %}
-          <a href="{% url 'admin_dashboard' %}"><button class="back">Back</button></a>
-       {% else %}
-          <a href="{% url 'user_dashboard' %}"><button class="back">Back</button></a>
+            <a href="{% url 'admin_dashboard' %}" class="back-btn">← Back</a>
+        {% else %}
+            <a href="{% url 'user_dashboard' %}" class="back-btn">← Back</a>
         {% endif %}
     </div>
 </body>
