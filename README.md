@@ -1,4 +1,4 @@
------Commands used to run the project in Windows-----
+-----Commands used to run the project-----
 #  Creating the Virtual Environment
    python -m venv .venv
    
@@ -15,9 +15,9 @@
    python manage.py runserver
 
 -----Other django  commads used----
-python manage.py makemigrations -> Creates migration files from model changes
-python manage.py migrate -> Applies those changes to the database
-python manage.py createsuperuser -> Creates an admin account for django admin 
+> python manage.py makemigrations -> Creates migration files from model changes
+> python manage.py migrate -> Applies those changes to the database
+> python manage.py createsuperuser -> Creates an admin account for django admin 
 
 -----Admin panel access-----
 admin username -> ray
