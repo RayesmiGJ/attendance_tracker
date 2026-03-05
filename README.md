@@ -19,7 +19,11 @@
 > python manage.py migrate -> Applies those changes to the database
 > python manage.py createsuperuser -> Creates an admin account for django admin 
 
+# Creating Admin account 
+   python manage.py createsuperuser
+   -> Enter the <username> , <mail id> and <password>
+   
 -----Admin panel access-----
-admin username -> xavier
-admin password -> sxcce123
+admin username -> <username>
+admin password -> <password>
 admin URL: http://127.0.0.1:8000/admin
