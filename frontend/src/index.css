@@ -1,0 +1,16 @@
+:root {
+  --moss-dark: #3D4127;
+  --moss-green: #636B2F;
+  --moss-light: #BAC095;
+  --moss-pale: #D4DE95;
+}
+
+body {
+  margin: 0;
+  font-family: 'Times New Roman', Times, serif;
+  background-color: var(--moss-light);
+}
+
+* {
+  box-sizing: border-box;
+}
