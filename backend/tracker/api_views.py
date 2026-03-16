@@ -49,6 +49,7 @@ def check_auth(request):
         })
     return Response({'authenticated': False}, status=status.HTTP_401_UNAUTHORIZED)
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_dashboard(request):
@@ -134,23 +135,26 @@ def view_attendance_api(request):
         attendance_records = attendance_records.filter(date__lte=to_date_obj)
         leave_records = leave_records.filter(date__lte=to_date_obj)
         wfh_records = wfh_records.filter(from_date__lte=to_date_obj) | wfh_records.filter(to_date__lte=to_date_obj)
-    
+     
     all_records = []
     for record in attendance_records:
         all_records.append({
             'date': record.date,
             'status': 'Present',
             'type': 'attendance',
-            'details': ''
+            'details': '',
+            'applied_on': record.created_at.isoformat()
         })
     for record in leave_records:
         all_records.append({
             'date': record.date,
             'status': 'Leave',
             'type': 'leave',
-            'details': f"{record.get_leave_type_display()} - {record.reason}"
+            'details': f"{record.get_leave_type_display()} - {record.reason}",
+            'applied_on': record.created_at.isoformat()
         })
     wfh_dates = []
+    wfh_created_map = {}
     for wfh in wfh_records:
         current = wfh.from_date
         while current <= wfh.to_date:
@@ -159,8 +163,10 @@ def view_attendance_api(request):
                 to_obj = parse_date(to_date)
                 if from_obj <= current <= to_obj:
                     wfh_dates.append(current)
+                    wfh_created_map[current.isoformat()] = wfh.created_at.isoformat()
             else:
                 wfh_dates.append(current)
+                wfh_created_map[current.isoformat()] = wfh.created_at.isoformat()
             current += timedelta(days=1)
     
     for wfh_date in set(wfh_dates):
@@ -170,7 +176,8 @@ def view_attendance_api(request):
                 'date': wfh_date,
                 'status': 'WFH',
                 'type': 'wfh',
-                'details': ''
+                'details': '',
+                'applied_on': wfh_created_map.get(wfh_date.isoformat(), None)
             })
     
     all_records.sort(key=lambda x: x['date'], reverse=True)
@@ -198,20 +205,37 @@ def wfh_api(request):
             return Response({'error': 'Both from_date and to_date are required'}, 
                           status=status.HTTP_400_BAD_REQUEST)
         
+        today = date.today().isoformat()
+        if from_date <= today:
+            return Response(
+                {'error': 'Cannot apply WFH for today or past dates. Please apply for future dates only.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         overlapping = WorkFromHome.objects.filter(
             user=request.user,
             from_date__lte=to_date,
             to_date__gte=from_date
         ).exists()
+        
         leave_in_range = Leave.objects.filter(
             user=request.user,
             date__range=[from_date, to_date]
         ).exists()
+        
+        attendance_in_range = Attendance.objects.filter(
+            user=request.user,
+            date__range=[from_date, to_date]
+        ).exists()
+        
         if overlapping:
             return Response({'error': 'Cannot apply - Overlaps with existing WFH period!'}, 
                           status=status.HTTP_400_BAD_REQUEST)
         elif leave_in_range:
             return Response({'error': 'Cannot apply - You have Leave in this date range!'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        elif attendance_in_range:
+            return Response({'error': 'Cannot apply - You have already marked attendance for some dates in this range!'}, 
                           status=status.HTTP_400_BAD_REQUEST)
         else:
             wfh = WorkFromHome.objects.create(
@@ -240,6 +264,7 @@ def leave_api(request):
         
         if not all([leave_type, reason]):
             return Response({'error': 'Leave type and reason are required'},status=status.HTTP_400_BAD_REQUEST)
+        
         if leave_date:
             if not leave_date:
                 return Response({'error': 'Date is required'},status=status.HTTP_400_BAD_REQUEST)
@@ -261,7 +286,6 @@ def leave_api(request):
             if Leave.objects.filter(user=request.user, date=leave_date).exists():
                 return Response({'error': f'You already applied leave for {leave_date}!'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Create single leave record
             leave = Leave.objects.create(
                 user=request.user,
                 leave_type=leave_type,
@@ -269,9 +293,11 @@ def leave_api(request):
                 date=leave_date
             )
             serializer = LeaveSerializer(leave)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response({
+                'message': 'Leave applied successfully!',
+                'leaves': [serializer.data] 
+            }, status=status.HTTP_201_CREATED)
         
-        # Handle multiple day leave
         elif from_date and to_date:
             if from_date > to_date:
                 return Response({'error': 'From date must be before or equal to To date'},status=status.HTTP_400_BAD_REQUEST)
@@ -317,7 +343,8 @@ def leave_api(request):
             serializer = LeaveSerializer(created_leaves, many=True)
             return Response({
                 'message': f'{len(created_leaves)} leave days applied successfully',
-                'leaves': serializer.data}, status=status.HTTP_201_CREATED)       
+                'leaves': serializer.data
+            }, status=status.HTTP_201_CREATED)       
         else:
             return Response({'error': 'Please provide either a single date or from_date and to_date'},status=status.HTTP_400_BAD_REQUEST)
 
@@ -330,4 +357,3 @@ def admin_users_api(request):
     users = User.objects.all()
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
-

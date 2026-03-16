@@ -6,6 +6,7 @@ class Attendance(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     date = models.DateField(default=date.today)
     status = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True,null=True)
     
     class Meta:
         unique_together = ['user', 'date']
@@ -14,6 +15,7 @@ class WorkFromHome(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     from_date = models.DateField()
     to_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True,null=True)
 
 class Leave(models.Model):
     LEAVE_TYPES = [
@@ -25,6 +27,7 @@ class Leave(models.Model):
     leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES)
     reason = models.TextField()
     date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True,null=True)
     
     class Meta:
         unique_together = ['user', 'date']

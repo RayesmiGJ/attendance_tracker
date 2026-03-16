@@ -5,7 +5,7 @@ import api from '../../services/api';
 function ApplyLeave({ user }) {
   const [leaveType, setLeaveType] = useState('single'); 
   const [formData, setFormData] = useState({
-    leave_type: 'SL',
+    leave_type: '', 
     date: '',
     from_date: '',
     to_date: '',
@@ -26,6 +26,14 @@ function ApplyLeave({ user }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (submitting) return;
+    
+    if (!formData.leave_type) {
+      setError('Please select a leave type');
+      return;
+    }
+    
     setSubmitting(true);
     setError('');
     setSuccess(false);
@@ -49,11 +57,19 @@ function ApplyLeave({ user }) {
           setSubmitting(false);
           return;
         }
+        
+        if (new Date(formData.from_date) > new Date(formData.to_date)) {
+          setError('From date cannot be after to date');
+          setSubmitting(false);
+          return;
+        }
+        
         leaveData.from_date = formData.from_date;
         leaveData.to_date = formData.to_date;
       }
       
       const response = await api.post('/leave/', leaveData);
+      
       if (response.data.message) {
         setSuccessMessage(response.data.message);
       } else {
@@ -62,18 +78,40 @@ function ApplyLeave({ user }) {
       
       setSuccess(true);
       
-      setFormData({ 
-        leave_type: 'SL', 
-        date: '', 
-        from_date: '', 
-        to_date: '', 
-        reason: '' 
-      });
-      setTimeout(() => {setSuccess(false);setSuccessMessage('');}, 3000);
+      setTimeout(() => {
+        setFormData({ 
+          leave_type: '',
+          date: '', 
+          from_date: '', 
+          to_date: '', 
+          reason: '' 
+        });
+        setLeaveType('single');
+      }, 100);
+      
+      setTimeout(() => {
+        if (user.is_admin) {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+      }, 2000);
       
     } catch (err) {
-      console.error('Leave application error:', err.response?.data);
-      setError(err.response?.data?.error || 'Failed to apply leave');
+      console.error('Leave application error:', err);
+      
+      if (err.response?.status === 401) {
+        setError('Session expired. Please login again.');
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (err.response?.status === 400) {
+        setError(err.response?.data?.error || 'Invalid request. Please check your input.');
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again later.');
+      } else if (err.code === 'ECONNABORTED') {
+        setError('Request timeout. Please check your connection.');
+      } else {
+        setError(err.response?.data?.error || err.response?.data?.message || 'Failed to apply leave. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -95,7 +133,10 @@ function ApplyLeave({ user }) {
         <h2 style={styles.title}>Apply Leave</h2>
         
         {success && (
-          <div style={styles.success}>{successMessage}</div>
+          <div style={styles.success}>
+            {successMessage}
+            <div style={styles.redirect}>Redirecting to dashboard...</div>
+          </div>
         )}
         
         {error && (
@@ -111,7 +152,9 @@ function ApplyLeave({ user }) {
               onChange={handleChange}
               style={styles.select}
               required
+              disabled={success || submitting}
             >
+              <option value="" disabled>Select Leave Type</option>
               <option value="SL">Sick Leave</option>
               <option value="PL">Paid Leave</option>
               <option value="CL">Casual Leave</option>
@@ -119,24 +162,32 @@ function ApplyLeave({ user }) {
           </div>
           
           <div style={styles.toggleGroup}>
-            <button type="button" onClick={() => {
+            <button 
+              type="button" 
+              onClick={() => {
                 setLeaveType('single');
                 setError(''); 
               }}
+              disabled={success || submitting}
               style={{
                 ...styles.toggleButton,
-                ...(leaveType === 'single' ? styles.toggleButtonActive : {})
+                ...(leaveType === 'single' ? styles.toggleButtonActive : {}),
+                ...((success || submitting) ? styles.disabledToggleButton : {})
               }}
             >
               Single Day
             </button>
-            <button type="button" onClick={() => {
+            <button 
+              type="button" 
+              onClick={() => {
                 setLeaveType('range');
                 setError(''); 
               }}
+              disabled={success || submitting}
               style={{
                 ...styles.toggleButton,
-                ...(leaveType === 'range' ? styles.toggleButtonActive : {})
+                ...(leaveType === 'range' ? styles.toggleButtonActive : {}),
+                ...((success || submitting) ? styles.disabledToggleButton : {})
               }}
             >
               Multiple Days
@@ -146,7 +197,15 @@ function ApplyLeave({ user }) {
           {leaveType === 'single' && (
             <div style={styles.formGroup}>
               <label style={styles.label}>Date:</label>
-              <input type="date"  name="date"  value={formData.date}  onChange={handleChange}  min={today}  style={styles.input} required
+              <input 
+                type="date"  
+                name="date"  
+                value={formData.date}  
+                onChange={handleChange}  
+                min={today}  
+                style={styles.input} 
+                required
+                disabled={success || submitting}
               />
             </div>
           )}
@@ -155,13 +214,29 @@ function ApplyLeave({ user }) {
             <>
               <div style={styles.formGroup}>
                 <label style={styles.label}>From Date:</label>
-                <input type="date"  name="from_date"  value={formData.from_date}  onChange={handleChange}  min={today} style={styles.input}  required
+                <input 
+                  type="date"  
+                  name="from_date"  
+                  value={formData.from_date}  
+                  onChange={handleChange}  
+                  min={today} 
+                  style={styles.input}  
+                  required
+                  disabled={success || submitting}
                 />
               </div>
               
               <div style={styles.formGroup}>
                 <label style={styles.label}>To Date:</label>
-                <input  type="date" name="to_date"  value={formData.to_date}  onChange={handleChange}  min={formData.from_date || today}  style={styles.input}  required
+                <input  
+                  type="date" 
+                  name="to_date"  
+                  value={formData.to_date}  
+                  onChange={handleChange}  
+                  min={formData.from_date || today}  
+                  style={styles.input}  
+                  required
+                  disabled={success || submitting}
                 />
               </div>
             </>
@@ -169,21 +244,33 @@ function ApplyLeave({ user }) {
           
           <div style={styles.formGroup}>
             <label style={styles.label}>Reason:</label>
-            <textarea  name="reason"  value={formData.reason}  onChange={handleChange}  rows="3"  style={styles.textarea}
+            <textarea  
+              name="reason"  
+              value={formData.reason}  
+              onChange={handleChange}  
+              rows="3"  
+              style={styles.textarea}
               required
+              disabled={success || submitting}
+              placeholder="Enter reason for leave..."
             />
           </div>
           
           <button 
             type="submit" 
-            disabled={submitting}
-            style={styles.submitButton}
+            disabled={submitting || success}
+            style={submitting || success ? styles.disabledButton : styles.submitButton}
           >
-            {submitting ? 'Applying...' : 'Apply Leave'}
+            {submitting ? 'Applying...' : success ? 'Applied ✓' : 'Apply Leave'}
           </button>
         </form>
         
-        <button onClick={handleBack} style={styles.backButton}>Back to Dashboard</button>
+        <button 
+          onClick={handleBack} 
+          style={styles.backButton}
+        >
+          Back to Dashboard
+        </button>
       </div>
     </div>
   );
@@ -196,6 +283,7 @@ const styles = {
     alignItems: 'center',
     minHeight: '100vh',
     padding: '20px',
+    backgroundColor: '#f5f5f5',
   },
   card: {
     background: 'white',
@@ -236,6 +324,8 @@ const styles = {
     fontSize: '15px',
     fontFamily: 'Times New Roman, Times, serif',
     boxSizing: 'border-box',
+    transition: 'border-color 0.2s',
+    outline: 'none',
   },
   select: {
     width: '100%',
@@ -246,6 +336,8 @@ const styles = {
     fontFamily: 'Times New Roman, Times, serif',
     boxSizing: 'border-box',
     backgroundColor: 'white',
+    transition: 'border-color 0.2s',
+    outline: 'none',
   },
   textarea: {
     width: '100%',
@@ -256,6 +348,8 @@ const styles = {
     fontFamily: 'Times New Roman, Times, serif',
     boxSizing: 'border-box',
     resize: 'vertical',
+    transition: 'border-color 0.2s',
+    outline: 'none',
   },
   toggleGroup: {
     display: 'flex',
@@ -272,12 +366,19 @@ const styles = {
     cursor: 'pointer',
     fontSize: '14px',
     fontFamily: 'Times New Roman, Times, serif',
-    transition: '0.2s',
+    transition: 'all 0.2s',
+    fontWeight: 500,
   },
   toggleButtonActive: {
     backgroundColor: 'var(--moss-green)',
     color: 'white',
     borderColor: 'var(--moss-dark)',
+  },
+  disabledToggleButton: {
+    backgroundColor: '#f0f0f0',
+    color: '#999',
+    borderColor: '#ddd',
+    cursor: 'not-allowed',
   },
   submitButton: {
     width: '100%',
@@ -290,6 +391,20 @@ const styles = {
     cursor: 'pointer',
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
+    transition: 'background-color 0.2s',
+    fontWeight: 500,
+  },
+  disabledButton: {
+    width: '100%',
+    padding: '12px',
+    margin: '15px 0 8px',
+    backgroundColor: '#cccccc',
+    color: '#666666',
+    border: '1px solid #999999',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontFamily: 'Times New Roman, Times, serif',
+    cursor: 'not-allowed',
   },
   backButton: {
     width: '100%',
@@ -302,6 +417,8 @@ const styles = {
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
     marginTop: '5px',
+    transition: 'background-color 0.2s',
+    fontWeight: 500,
   },
   success: {
     backgroundColor: 'var(--moss-pale)',
@@ -311,6 +428,11 @@ const styles = {
     marginBottom: '20px',
     textAlign: 'center',
     border: '2px solid var(--moss-green)',
+  },
+  redirect: {
+    fontSize: '14px',
+    marginTop: '5px',
+    color: 'var(--moss-green)',
   },
   error: {
     backgroundColor: '#f8d7da',
@@ -322,5 +444,6 @@ const styles = {
     border: '2px solid #f5c6cb',
   },
 };
+
 
 export default ApplyLeave;

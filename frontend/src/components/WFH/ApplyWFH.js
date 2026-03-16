@@ -29,7 +29,14 @@ function ApplyWFH({ user }) {
       setSuccess(true);
       setFormData({ from_date: '', to_date: '' });
       
-      setTimeout(() => setSuccess(false), 3000);
+      setTimeout(() => {
+        if (user.is_admin) {  
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+      }, 2000);
+      
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to apply WFH');
     } finally {
@@ -38,7 +45,7 @@ function ApplyWFH({ user }) {
   };
 
   const handleBack = () => {
-    if (user.is_superuser) {
+    if (user.is_admin) {  
       navigate('/admin');
     } else {
       navigate('/dashboard');
@@ -53,7 +60,10 @@ function ApplyWFH({ user }) {
         <h2 style={styles.title}>Apply Work From Home</h2>
         
         {success && (
-          <div style={styles.success}> WFH applied successfully!</div>
+          <div style={styles.success}>
+            WFH applied successfully!
+            <div style={styles.redirect}>Redirecting to dashboard...</div>
+          </div>
         )}
         
         {error && (
@@ -71,6 +81,7 @@ function ApplyWFH({ user }) {
               min={today}
               style={styles.input}
               required
+              disabled={success}  
             />
           </div>
           
@@ -84,20 +95,26 @@ function ApplyWFH({ user }) {
               min={formData.from_date || today}
               style={styles.input}
               required
+              disabled={success}  
             />
           </div>
           
           <button 
             type="submit" 
-            disabled={submitting}
-            style={styles.submitButton}
-            
+            disabled={submitting || success}
+            style={submitting || success ? styles.disabledButton : styles.submitButton}
           >
-            {submitting ? 'Applying...' : 'Apply'}
+            {submitting ? 'Applying...' : success ? 'Applied ✓' : 'Apply'}
           </button>
         </form>
         
-        <button onClick={handleBack} style={styles.backButton}>Back</button>
+        <button 
+          onClick={handleBack} 
+          style={styles.backButton}
+          disabled={success}  
+        >
+          Back
+        </button>
       </div>
     </div>
   );
@@ -162,6 +179,18 @@ const styles = {
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
   },
+  disabledButton: {
+    width: '100%',
+    padding: '12px',
+    margin: '15px 0 8px',
+    backgroundColor: '#cccccc',
+    color: '#666666',
+    border: '1px solid #999999',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontFamily: 'Times New Roman, Times, serif',
+    cursor: 'not-allowed',
+  },
   backButton: {
     width: '100%',
     padding: '12px',
@@ -182,6 +211,11 @@ const styles = {
     marginBottom: '20px',
     textAlign: 'center',
     border: '2px solid var(--moss-green)',
+  },
+  redirect: {
+    fontSize: '14px',
+    marginTop: '5px',
+    color: 'var(--moss-green)',
   },
   error: {
     backgroundColor: '#f8d7da',
