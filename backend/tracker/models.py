@@ -22,6 +22,7 @@ class Leave(models.Model):
         ('SL', 'Sick Leave'),
         ('PL', 'Paid Leave'),
         ('CL', 'Casual Leave'),
+        ('AB', 'Absent'),
     ]
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES)

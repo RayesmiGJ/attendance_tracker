@@ -35,7 +35,7 @@ function ApplyWFH({ user }) {
         } else {
           navigate('/dashboard');
         }
-      }, 2000);
+      }, 1000);
       
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to apply WFH');
@@ -108,11 +108,7 @@ function ApplyWFH({ user }) {
           </button>
         </form>
         
-        <button 
-          onClick={handleBack} 
-          style={styles.backButton}
-          disabled={success}  
-        >
+        <button onClick={handleBack} style={styles.backButton} disabled={success} >
           Back
         </button>
       </div>

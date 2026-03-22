@@ -7,13 +7,56 @@ function MarkAttendance({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [markedTime, setMarkedTime] = useState(null);
+  const [currentTime, setCurrentTime] = useState('');
+  const [showRedirect, setShowRedirect] = useState(false);
+  const [currentDate] = useState(() => {
+    return new Date().toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const time = new Date().toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      setCurrentTime(time);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const getCurrentIndianTime = () => {
+    return new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
 
   useEffect(() => {
     const checkAttendance = async () => {
       try {
         const response = await api.get('/attendance/');
         setAttendanceData(response.data);
+        
+        const storedMarkedTime = localStorage.getItem('attendance_marked_time');
+        const storedDate = localStorage.getItem('attendance_marked_date');
+        
+        if (response.data.already_marked && storedMarkedTime && storedDate === currentDate) {
+          setMarkedTime(storedMarkedTime);
+        }
       } catch (err) {
         setError('Failed to load attendance data');
       } finally {
@@ -21,21 +64,39 @@ function MarkAttendance({ user }) {
       }
     };   
     checkAttendance();
-  }, []);
+  }, [currentDate]);
 
   const handleMarkAttendance = async () => {
     setSubmitting(true);
     setError('');
+    setShowRedirect(true);
     
     try {
       await api.post('/attendance/');
-      if (user.is_admin) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      
+      const markingTime = getCurrentIndianTime();
+      
+      setMarkedTime(markingTime);
+      localStorage.setItem('attendance_marked_time', markingTime);
+      localStorage.setItem('attendance_marked_date', currentDate);
+      
+      setAttendanceData({
+        ...attendanceData,
+        already_marked: true,
+        can_mark: false
+      });
+      
+      setTimeout(() => {
+        if (user.is_admin) {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
+      }, 2000);
+      
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to mark attendance');
+      setShowRedirect(false);
     } finally {
       setSubmitting(false);
     }
@@ -50,15 +111,9 @@ function MarkAttendance({ user }) {
   };
 
   const getStatusMessage = () => {
-    if (attendanceData?.on_leave) {
-      return "You are on Leave today";
-    }
-    if (attendanceData?.on_wfh) {
-      return "You are on Work From Home today";
-    }
-    if (attendanceData?.already_marked) {
-      return "You have already marked attendance today";
-    }
+    if (attendanceData?.on_leave) return "You are on Leave today";
+    if (attendanceData?.on_wfh) return "You are on Work From Home today";
+    if (attendanceData?.already_marked) return "You have already marked attendance today";
     return null;
   };
 
@@ -71,13 +126,12 @@ function MarkAttendance({ user }) {
       <div style={styles.container}>
         <div style={styles.card}>
           <h2 style={styles.title}>Mark Attendance</h2>
-          <p style={styles.date}>Date: {new Date().toLocaleDateString('en-US', { 
-            year: 'numeric', month: 'long', day: 'numeric' 
-          })}</p>
-          
+          <div style={styles.dateTimeContainer}>
+            <p style={styles.date}>{currentDate}</p>
+            <p style={styles.time}>{currentTime}</p>
+          </div>
           <div style={styles.error}>{error}</div>
-          
-          <button onClick={handleBack} style={styles.backButton}>Back</button>
+          <button onClick={handleBack} style={styles.backButton}>Back to Dashboard</button>
         </div>
       </div>
     );
@@ -89,25 +143,40 @@ function MarkAttendance({ user }) {
     <div style={styles.container}>
       <div style={styles.card}>
         <h2 style={styles.title}>Mark Attendance</h2>
-        <p style={styles.date}>Date: {new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', month: 'long', day: 'numeric' 
-        })}</p>
         
-        {attendanceData?.can_mark ? (
-          <button 
-            onClick={handleMarkAttendance} 
-            disabled={submitting}
-            style={styles.markButton}
-          >
-            {submitting ? 'Marking...' : 'Mark Present'}
-          </button>
-        ) : (
-          <div style={styles.info}>
-            <p style={styles.infoText}>{statusMessage}</p>
+        <div style={styles.dateTimeContainer}>
+          <p style={styles.date}>{currentDate}</p>
+          <p style={styles.time}>{currentTime}</p>
+        </div>
+        
+        {markedTime ? (
+          <div style={styles.markedTimeContainer}>
+            <p style={styles.markedTimeLabel}>✓ Attendance Marked</p>
+            <p style={styles.markedTimeValue}>{markedTime}</p>
+            {showRedirect && (
+              <p style={styles.redirectMessage}>Redirecting to dashboard...</p>
+            )}
           </div>
+        ) : (
+          <>
+            {attendanceData?.can_mark ? (
+              <button 
+                onClick={handleMarkAttendance} 
+                disabled={submitting}
+                style={submitting ? styles.disabledButton : styles.markButton}
+              >
+                {submitting ? 'Marking...' : 'Mark Present'}
+              </button>
+            ) : (
+              <div style={styles.info}>
+                <p style={styles.infoText}>{statusMessage || 'Cannot mark attendance'}</p>
+              </div>
+            )}
+          </>
         )}
-        
+        <center>
         <button onClick={handleBack} style={styles.backButton}>Back to Dashboard</button>
+        </center>
       </div>
     </div>
   );
@@ -115,18 +184,15 @@ function MarkAttendance({ user }) {
 
 const styles = {
   container: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: '100px',
     minHeight: '100vh',
-    padding: '20px',
   },
   card: {
+    maxWidth: '400px',
+    margin: '0 auto',
     background: 'white',
-    padding: '40px',
+    padding: '30px',
     borderRadius: '16px',
-    width: '350px',
-    textAlign: 'center',
     boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
     border: '2px solid var(--moss-green)',
   },
@@ -134,16 +200,71 @@ const styles = {
     color: 'var(--moss-dark)',
     fontSize: '28px',
     marginTop: 0,
-    marginBottom: '20px',
-    fontWeight: 500,
-  },
-  date: {
-    fontSize: '18px',
-    color: 'var(--moss-green)',
-    backgroundColor: 'var(--moss-pale)',
-    padding: '10px',
-    borderRadius: '8px',
     marginBottom: '25px',
+    fontWeight: 500,
+    textAlign: 'center',
+    borderBottom: '2px solid var(--moss-light)',
+    paddingBottom: '15px',
+  },
+ dateTimeContainer: {
+  backgroundColor: 'var(--moss-pale)',
+  padding: '15px 20px',
+  borderRadius: '12px',
+  marginBottom: '25px',
+  border: '1px solid var(--moss-green)',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: '10px',
+},
+date: {
+  fontSize: '18px',
+  color: 'var(--moss-dark)',
+  margin: 0,
+  fontWeight: 500,
+},
+time: {
+  fontSize: '20px',
+  color: 'var(--moss-dark)',
+  margin: 0,
+  fontWeight: 500,
+  fontFamily: 'Times New Roman, Times, serif',
+  backgroundColor: 'white',
+  padding: '5px 12px',
+  borderRadius: '20px',
+  border: '1px solid var(--moss-green)',
+},
+  markedTimeContainer: {
+    marginBottom: '20px',
+    padding: '15px',
+    backgroundColor: 'var(--moss-pale)',
+    borderRadius: '12px',
+    border: '2px solid var(--moss-green)',
+  },
+  markedTimeLabel: {
+    fontSize: '12px',
+    color: 'var(--moss-dark)',
+    margin: '0 0 10px 0',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    textAlign: 'center',
+  },
+  markedTimeValue: {
+    fontSize: '20px',
+    color: 'var(--moss-dark)',
+    margin: '0 0 5px 0',
+    fontWeight: 600,
+    fontFamily: 'Times New Roman, Times, serif',
+    textAlign: 'center',
+  },
+  redirectMessage: {
+    fontSize: '14px',
+    color: 'var(--moss-green)',
+    margin: '10px 0 0 0',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    animation: 'pulse 1.5s infinite',
   },
   markButton: {
     padding: '12px 25px',
@@ -155,25 +276,40 @@ const styles = {
     margin: '10px 5px',
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
-    transition: '0.2s',
     width: '100%',
-    '&:disabled': {
-      opacity: 0.6,
-      cursor: 'not-allowed',
+    transition: 'all 0.2s ease',
+    ':hover': {
+      backgroundColor: 'var(--moss-dark)',
     },
   },
-  backButton: {
+  disabledButton: {
     padding: '12px 25px',
-    backgroundColor: 'var(--moss-pale)',
-    color: 'var(--moss-dark)',
-    border: '1px solid var(--moss-green)',
+    backgroundColor: '#cccccc',
+    color: '#666666',
+    border: '1px solid #999999',
     borderRadius: '8px',
-    cursor: 'pointer',
+    cursor: 'not-allowed',
     margin: '10px 5px',
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
-    transition: '0.2s',
     width: '100%',
+  },
+  backButton: {
+    display: 'inline-block',
+    backgroundColor: 'var(--moss-pale)',
+    color: 'var(--moss-dark)',
+    padding: '12px 25px',
+    border: '2px solid var(--moss-green)',
+    borderRadius: '8px',
+    fontSize: '16px',
+    cursor: 'pointer',
+    fontFamily: 'Times New Roman, Times, serif',
+    width: '60%',
+    marginTop: '10px',
+    transition: 'all 0.2s ease',
+    ':hover': {
+      backgroundColor: '#d4c8b0',
+    },
   },
   error: {
     color: '#a94442',
@@ -181,6 +317,7 @@ const styles = {
     padding: '12px',
     borderRadius: '8px',
     marginBottom: '20px',
+    textAlign: 'center',
     border: '1px solid #ebccd1',
   },
   info: {
@@ -192,15 +329,27 @@ const styles = {
     padding: '12px',
     borderRadius: '8px',
     fontSize: '16px',
+    textAlign: 'center',
+    border: '1px solid var(--moss-green)',
+    margin: 0,
   },
   loading: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh',
-    fontSize: '20px',
+    textAlign: 'center',
+    padding: '40px',
     color: 'var(--moss-dark)',
+    fontSize: '20px',
   },
 };
+
+// Add this to your global CSS file or index.css
+const styleSheet = document.createElement("style");
+styleSheet.innerText = `
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+`;
+document.head.appendChild(styleSheet);
 
 export default MarkAttendance;

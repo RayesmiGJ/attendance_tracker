@@ -95,7 +95,7 @@ function ApplyLeave({ user }) {
         } else {
           navigate('/dashboard');
         }
-      }, 2000);
+      }, 1000);
       
     } catch (err) {
       console.error('Leave application error:', err);
