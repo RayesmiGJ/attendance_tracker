@@ -24,11 +24,18 @@ class Leave(models.Model):
         ('CL', 'Casual Leave'),
         ('AB', 'Absent'),
     ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     leave_type = models.CharField(max_length=2, choices=LEAVE_TYPES)
     reason = models.TextField()
     date = models.DateField()
-    created_at = models.DateTimeField(auto_now_add=True,null=True)
-    
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    admin_remarks = models.TextField(blank=True, null=True)
+
     class Meta:
         unique_together = ['user', 'date']

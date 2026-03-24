@@ -11,4 +11,6 @@ urlpatterns = [
     path('wfh/', api_views.wfh_api, name='api_wfh'),
     path('leave/', api_views.leave_api, name='api_leave'),
     path('admin/users/', api_views.admin_users_api, name='api_admin_users'),
+    path('admin/leave-requests/', api_views.admin_leave_requests, name='admin_leave_requests'),
+    path('admin/leave-action/<int:leave_id>/', api_views.admin_leave_action, name='admin_leave_action'),
 ]
