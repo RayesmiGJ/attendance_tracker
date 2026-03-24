@@ -18,7 +18,7 @@ A Django-based attendance tracking system with REST API.
    - python manage.py showmigrations 
 # Create Admin User
    - python manage.py createsuperuser
-     Follow prompts to enter:
+   - Follow prompts to enter:
       ->Username
       ->Email
       ->Password
@@ -28,7 +28,7 @@ A Django-based attendance tracking system with REST API.
    - Admin Panel: http://127.0.0.1:8000/admin
    *Login in it and create users*
 # Install and Start the npm in an other terminal:
-   npm install
-   npm start
+   - npm install
+   - npm start
 
 
