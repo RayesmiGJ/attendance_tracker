@@ -208,10 +208,9 @@ def view_attendance_api(request):
             'type': 'leave',
             'details': f"{record.get_leave_type_display()} - {record.reason}",
             'applied_on': applied_on_value,
-            'request_status': record.status,   # 'pending', 'approved', 'rejected'
+            'request_status': record.status,   
         })
 
-    # For WFH records we expand each day
     wfh_dates = []
     wfh_created_map = {}
     for wfh in wfh_records:
@@ -278,7 +277,6 @@ def wfh_api(request):
             to_date__gte=from_date
         ).exists()
 
-        # Check for any leave (pending or approved) in range
         leave_in_range = Leave.objects.filter(
             user=request.user,
             date__range=[from_date, to_date],
@@ -338,12 +336,10 @@ def leave_api(request):
                 return Response({'error': 'Invalid date format'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Check for existing pending/approved leave (these block)
             if Leave.objects.filter(user=request.user, date=leave_date, status__in=['pending', 'approved']).exists():
                 return Response({'error': f'You already have a pending or approved leave for {leave_date}.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Check for WFH or attendance
             wfh = WorkFromHome.objects.filter(
                 user=request.user,
                 from_date__lte=leave_date,
@@ -361,10 +357,8 @@ def leave_api(request):
                 return Response({'error': f'Cannot apply leave for {leave_date} - You already marked attendance for this date!'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Determine status
             new_status = 'approved' if leave_date_obj <= today else 'pending'
 
-            # Check if there is a rejected leave for this date; update it if so
             existing_rejected = Leave.objects.filter(user=request.user, date=leave_date, status='rejected').first()
             if existing_rejected:
                 existing_rejected.leave_type = leave_type
@@ -376,9 +370,8 @@ def leave_api(request):
                 return Response({
                     'message': message,
                     'leaves': [serializer.data]
-                }, status=status.HTTP_200_OK)  # 200 OK because we updated
+                }, status=status.HTTP_200_OK)  
             else:
-                # No rejected leave, create new
                 leave = Leave.objects.create(
                     user=request.user,
                     leave_type=leave_type,
@@ -403,7 +396,6 @@ def leave_api(request):
                 return Response({'error': 'Invalid date format'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Check for any pending/approved leaves in range
             pending_approved = Leave.objects.filter(
                 user=request.user,
                 date__range=[from_date, to_date],
@@ -430,13 +422,11 @@ def leave_api(request):
                 return Response({'error': 'Cannot apply leave - You have marked attendance for some dates in this range!'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Process each date in the range
             created_or_updated = []
             current_date = from_date_obj
             while current_date <= to_date_obj:
                 new_status = 'approved' if current_date <= today else 'pending'
 
-                # Check for rejected leave on this date
                 existing_rejected = Leave.objects.filter(user=request.user, date=current_date, status='rejected').first()
                 if existing_rejected:
                     existing_rejected.leave_type = leave_type
@@ -498,11 +488,10 @@ def admin_leave_action(request, leave_id):
     except Leave.DoesNotExist:
         return Response({'error': 'Leave request not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    action = request.data.get('action')   # 'approve' or 'reject'
+    action = request.data.get('action')  
     remarks = request.data.get('remarks', '')
 
     if action == 'approve':
-        # Check for conflicts: attendance or WFH on that date
         if Attendance.objects.filter(user=leave.user, date=leave.date).exists():
             return Response({'error': f'Cannot approve: user already marked attendance on {leave.date}'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -527,3 +516,71 @@ def admin_leave_action(request, leave_id):
     leave.save()
     serializer = LeaveSerializer(leave)
     return Response({'message': message, 'leave': serializer.data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_create_user(request):
+    """Create a new user (admin only)"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    
+    username = request.data.get('username')
+    password = request.data.get('password')
+    email = request.data.get('email', '')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    is_staff = request.data.get('is_staff', False)
+    
+    if not username or not password:
+        return Response({'error': 'Username and password are required'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already exists'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        is_staff=is_staff
+    )
+    
+    return Response({
+        'message': 'User created successfully',
+        'user': UserSerializer(user).data
+    }, status=status.HTTP_201_CREATED)
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_all_users_with_activity(request):
+    """Get all users with their activity counts (admin only)"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    
+    users = User.objects.all().order_by('username')  # Alphabetical order
+    
+    user_data = []
+    for user_obj in users:
+        user_data.append({
+            'id': user_obj.id,
+            'username': user_obj.username,
+            'email': user_obj.email,
+            'first_name': user_obj.first_name,
+            'last_name': user_obj.last_name,
+            'is_staff': user_obj.is_staff,
+            'last_login': user_obj.last_login.strftime('%Y-%m-%d %H:%M:%S') if user_obj.last_login else 'Never logged in',
+            'stats': {
+                'total_attendance': Attendance.objects.filter(user=user_obj).count(),
+                'total_leave': Leave.objects.filter(user=user_obj).count(),
+                'pending_leave': Leave.objects.filter(user=user_obj, status='pending').count(),
+                'total_wfh': WorkFromHome.objects.filter(user=user_obj).count(),
+            }
+        })
+    
+    return Response(user_data)

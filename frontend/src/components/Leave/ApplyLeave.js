@@ -95,7 +95,7 @@ function ApplyLeave({ user }) {
         } else {
           navigate('/dashboard');
         }
-      }, 1000);
+      }, 2000);
       
     } catch (err) {
       console.error('Leave application error:', err);
@@ -283,7 +283,6 @@ const styles = {
     alignItems: 'center',
     minHeight: '100vh',
     padding: '20px',
-    backgroundColor: '#f5f5f5',
   },
   card: {
     background: 'white',

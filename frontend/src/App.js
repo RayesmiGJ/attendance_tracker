@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import api from './services/api';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
+import LeaveRequestsPage from './components/Admin/LeaveRequestsPage';
 import UserDashboard from './components/UserDashboard';
 import MarkAttendance from './components/Attendance/MarkAttendance';
 import ViewAttendance from './components/Attendance/ViewAttendance';
@@ -55,6 +56,10 @@ function App() {
         
         <Route path="/admin" element={
           user && isAdmin ? <AdminDashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />
+        } />
+
+         <Route path="/admin/leave-requests" element={
+          user && isAdmin ? <LeaveRequestsPage user={user} /> : <Navigate to="/login" />
         } />
         
         <Route path="/dashboard" element={
