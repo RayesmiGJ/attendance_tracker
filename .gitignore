@@ -9,3 +9,7 @@ venv/
 
 # Environment
 .env
+
+node_modules/
+.venv/
+.cache/
