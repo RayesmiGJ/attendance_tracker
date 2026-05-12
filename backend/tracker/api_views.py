@@ -5,23 +5,70 @@ from rest_framework import status
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from datetime import date, timedelta
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from .models import Attendance, WorkFromHome, Leave
-from .serializers import (UserSerializer, AttendanceSerializer,WorkFromHomeSerializer, LeaveSerializer, LoginSerializer)
+from .serializers import (UserSerializer, AttendanceSerializer,
+                          WorkFromHomeSerializer, LeaveSerializer, LoginSerializer)
+
+def get_ist_now():
+    return timezone.now() + timedelta(hours=5, minutes=30)
+
+def mark_absent_if_needed(user, target_date):
+    if Attendance.objects.filter(user=user, date=target_date).exists():
+        return False
+    if Leave.objects.filter(user=user, date=target_date, status__in=['pending', 'approved']).exists():
+        return False
+    if WorkFromHome.objects.filter(
+        user=user,
+        from_date__lte=target_date,
+        to_date__gte=target_date
+    ).exists():
+        return False
+
+    Leave.objects.create(
+        user=user,
+        leave_type='AB',
+        reason='No Reason Provided',
+        date=target_date,
+        status='approved'
+    )
+    return True
+
+def process_missing_attendance(user, until_date=None):
+    if until_date is None:
+        until_date = date.today()
+
+    ist_now = get_ist_now()
+    if until_date == date.today() and ist_now.hour < 18:
+        until_date = until_date - timedelta(days=1)
+
+    start_date = user.date_joined.date() if user.date_joined else until_date - timedelta(days=90)
+
+    current = start_date
+    while current <= until_date:
+        if current <= date.today():
+            mark_absent_if_needed(user, current)
+        current += timedelta(days=1)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_api(request):
     serializer = LoginSerializer(data=request.data)
     if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)   
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     username = serializer.validated_data['username']
-    password = serializer.validated_data['password']    
+    password = serializer.validated_data['password']
     user = authenticate(request, username=username, password=password)
+
     if user is not None:
         login(request, user)
+        process_missing_attendance(user)
+
         user_data = UserSerializer(user).data
-        user_data['is_admin'] = user.is_superuser 
+        user_data['is_admin'] = user.is_superuser
         return Response({
             'success': True,
             'user': user_data,
@@ -61,7 +108,8 @@ def get_dashboard(request):
         from_date__lte=today,
         to_date__gte=today
     ).exists()
-    leave_today = Leave.objects.filter(user=request.user, date=today).exists()   
+    # Check for approved leave only (pending should not block marking)
+    leave_today = Leave.objects.filter(user=request.user, date=today, status='approved').exists()
     return Response({
         'user': user_data,
         'stats': {
@@ -83,7 +131,8 @@ def attendance_api(request):
             from_date__lte=today,
             to_date__gte=today
         ).exists()
-        leave = Leave.objects.filter(user=request.user, date=today).exists()
+        # Check for any pending or approved leave
+        leave = Leave.objects.filter(user=request.user, date=today, status__in=['pending','approved']).exists()
         already_marked = Attendance.objects.filter(user=request.user, date=today).exists()
         return Response({
             'can_mark': not (wfh or leave or already_marked),
@@ -98,17 +147,17 @@ def attendance_api(request):
             from_date__lte=today,
             to_date__gte=today
         ).exists()
-        leave = Leave.objects.filter(user=request.user, date=today).exists()
-        already_marked = Attendance.objects.filter(user=request.user, date=today).exists()       
+        leave = Leave.objects.filter(user=request.user, date=today, status__in=['pending','approved']).exists()
+        already_marked = Attendance.objects.filter(user=request.user, date=today).exists()
         if wfh:
-            return Response({'error': 'Cannot mark - You are on Work From Home today'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Cannot mark - You are on Work From Home today'},
+                            status=status.HTTP_400_BAD_REQUEST)
         if leave:
-            return Response({'error': 'Cannot mark - You are on Leave today'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Cannot mark - You have a pending or approved leave for today'},
+                            status=status.HTTP_400_BAD_REQUEST)
         if already_marked:
-            return Response({'error': 'Already marked today'}, 
-                          status=status.HTTP_400_BAD_REQUEST)       
+            return Response({'error': 'Already marked today'},
+                            status=status.HTTP_400_BAD_REQUEST)
         attendance = Attendance.objects.create(user=request.user, date=today)
         serializer = AttendanceSerializer(attendance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -122,35 +171,48 @@ def view_attendance_api(request):
     attendance_records = Attendance.objects.filter(user=request.user)
     leave_records = Leave.objects.filter(user=request.user)
     wfh_records = WorkFromHome.objects.filter(user=request.user)
-    
+
     if from_date:
         from_date_obj = parse_date(from_date)
         attendance_records = attendance_records.filter(date__gte=from_date_obj)
         leave_records = leave_records.filter(date__gte=from_date_obj)
         wfh_records = wfh_records.filter(from_date__gte=from_date_obj) | wfh_records.filter(to_date__gte=from_date_obj)
-    
+
     if to_date:
         to_date_obj = parse_date(to_date)
         attendance_records = attendance_records.filter(date__lte=to_date_obj)
         leave_records = leave_records.filter(date__lte=to_date_obj)
         wfh_records = wfh_records.filter(from_date__lte=to_date_obj) | wfh_records.filter(to_date__lte=to_date_obj)
-    
+
     all_records = []
     for record in attendance_records:
         all_records.append({
             'date': record.date,
             'status': 'Present',
             'type': 'attendance',
-            'details': ''
+            'details': '',
+            'applied_on': record.created_at.isoformat(),
+            'request_status': None
         })
     for record in leave_records:
+        applied_on_value = record.created_at.isoformat() if record.leave_type != 'AB' else None
+        if record.status == 'approved':
+         display_status = 'Leave'
+        elif record.status == 'pending':
+         display_status = 'Pending Leave'
+        else:  
+         display_status = 'Rejected'
         all_records.append({
             'date': record.date,
-            'status': 'Leave',
+            'status': display_status,
             'type': 'leave',
-            'details': f"{record.get_leave_type_display()} - {record.reason}"
+            'details': f"{record.get_leave_type_display()} - {record.reason}",
+            'applied_on': applied_on_value,
+            'request_status': record.status,   
         })
+
     wfh_dates = []
+    wfh_created_map = {}
     for wfh in wfh_records:
         current = wfh.from_date
         while current <= wfh.to_date:
@@ -159,10 +221,12 @@ def view_attendance_api(request):
                 to_obj = parse_date(to_date)
                 if from_obj <= current <= to_obj:
                     wfh_dates.append(current)
+                    wfh_created_map[current.isoformat()] = wfh.created_at.isoformat()
             else:
                 wfh_dates.append(current)
+                wfh_created_map[current.isoformat()] = wfh.created_at.isoformat()
             current += timedelta(days=1)
-    
+
     for wfh_date in set(wfh_dates):
         existing = [r for r in all_records if r['date'] == wfh_date]
         if not existing:
@@ -170,9 +234,11 @@ def view_attendance_api(request):
                 'date': wfh_date,
                 'status': 'WFH',
                 'type': 'wfh',
-                'details': ''
+                'details': '',
+                'applied_on': wfh_created_map.get(wfh_date.isoformat(), None),
+                'request_status': None
             })
-    
+
     all_records.sort(key=lambda x: x['date'], reverse=True)
     return Response({
         'records': all_records,
@@ -189,30 +255,48 @@ def wfh_api(request):
         wfh_records = WorkFromHome.objects.filter(user=request.user).order_by('-from_date')
         serializer = WorkFromHomeSerializer(wfh_records, many=True)
         return Response(serializer.data)
-    
+
     elif request.method == 'POST':
         from_date = request.data.get('from_date')
         to_date = request.data.get('to_date')
 
         if not from_date or not to_date:
-            return Response({'error': 'Both from_date and to_date are required'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({'error': 'Both from_date and to_date are required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        today = date.today().isoformat()
+        if from_date <= today:
+            return Response(
+                {'error': 'Cannot apply WFH for today or past dates. Please apply for future dates only.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         overlapping = WorkFromHome.objects.filter(
             user=request.user,
             from_date__lte=to_date,
             to_date__gte=from_date
         ).exists()
+
         leave_in_range = Leave.objects.filter(
+            user=request.user,
+            date__range=[from_date, to_date],
+            status__in=['pending', 'approved']
+        ).exists()
+
+        attendance_in_range = Attendance.objects.filter(
             user=request.user,
             date__range=[from_date, to_date]
         ).exists()
+
         if overlapping:
-            return Response({'error': 'Cannot apply - Overlaps with existing WFH period!'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Cannot apply - Overlaps with existing WFH period!'},
+                            status=status.HTTP_400_BAD_REQUEST)
         elif leave_in_range:
-            return Response({'error': 'Cannot apply - You have Leave in this date range!'}, 
-                          status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Cannot apply - You have a leave (pending or approved) in this date range!'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        elif attendance_in_range:
+            return Response({'error': 'Cannot apply - You have already marked attendance for some dates in this range!'},
+                            status=status.HTTP_400_BAD_REQUEST)
         else:
             wfh = WorkFromHome.objects.create(
                 user=request.user,
@@ -221,7 +305,6 @@ def wfh_api(request):
             )
             serializer = WorkFromHomeSerializer(wfh)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -237,97 +320,267 @@ def leave_api(request):
         leave_date = request.data.get('date')
         from_date = request.data.get('from_date')
         to_date = request.data.get('to_date')
-        
+
         if not all([leave_type, reason]):
-            return Response({'error': 'Leave type and reason are required'},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Leave type and reason are required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        today = date.today()
+
         if leave_date:
-            if not leave_date:
-                return Response({'error': 'Date is required'},status=status.HTTP_400_BAD_REQUEST)
-            
+            try:
+                leave_date_obj = parse_date(leave_date)
+                if leave_date_obj is None:
+                    raise ValueError
+            except:
+                return Response({'error': 'Invalid date format'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if Leave.objects.filter(user=request.user, date=leave_date, status__in=['pending', 'approved']).exists():
+                return Response({'error': f'You already have a pending or approved leave for {leave_date}.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
             wfh = WorkFromHome.objects.filter(
                 user=request.user,
                 from_date__lte=leave_date,
                 to_date__gte=leave_date
             ).exists()
             already_marked = Attendance.objects.filter(
-                user=request.user, 
+                user=request.user,
                 date=leave_date
             ).exists()
-            
+
             if wfh:
-                return Response({'error': f'Cannot apply leave for {leave_date} - This date is within your Work From Home period!'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': f'Cannot apply leave for {leave_date} - This date is within your Work From Home period!'},
+                                status=status.HTTP_400_BAD_REQUEST)
             if already_marked:
-                return Response({'error': f'Cannot apply leave for {leave_date} - You already marked attendance for this date!'}, status=status.HTTP_400_BAD_REQUEST)
-            if Leave.objects.filter(user=request.user, date=leave_date).exists():
-                return Response({'error': f'You already applied leave for {leave_date}!'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Create single leave record
-            leave = Leave.objects.create(
-                user=request.user,
-                leave_type=leave_type,
-                reason=reason,
-                date=leave_date
-            )
-            serializer = LeaveSerializer(leave)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
-        # Handle multiple day leave
-        elif from_date and to_date:
-            if from_date > to_date:
-                return Response({'error': 'From date must be before or equal to To date'},status=status.HTTP_400_BAD_REQUEST)
-            from_date_obj = parse_date(from_date)
-            to_date_obj = parse_date(to_date)
-            if not from_date_obj or not to_date_obj:
-                return Response({'error': 'Invalid date format'},status=status.HTTP_400_BAD_REQUEST)
-            
-            wfh_in_range = WorkFromHome.objects.filter(
-                user=request.user,
-                from_date__lte=to_date,
-                to_date__gte=from_date
-            ).exists()           
-            if wfh_in_range:
-                return Response({'error': 'Cannot apply leave - This date range overlaps with your Work From Home period!'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            attendance_in_range = Attendance.objects.filter(
-                user=request.user,
-                date__range=[from_date, to_date]
-            ).exists()           
-            if attendance_in_range:
-                return Response({'error': 'Cannot apply leave - You have marked attendance for some dates in this range!'},status=status.HTTP_400_BAD_REQUEST)
-            
-            leave_in_range = Leave.objects.filter(
-                user=request.user,
-                date__range=[from_date, to_date]
-            ).exists()
-            if leave_in_range:
-                return Response({'error': 'You already applied leave for some dates in this range!'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            created_leaves = []
-            current_date = from_date_obj
-            while current_date <= to_date_obj:
+                return Response({'error': f'Cannot apply leave for {leave_date} - You already marked attendance for this date!'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            new_status = 'approved' if leave_date_obj <= today else 'pending'
+
+            existing_rejected = Leave.objects.filter(user=request.user, date=leave_date, status='rejected').first()
+            if existing_rejected:
+                existing_rejected.leave_type = leave_type
+                existing_rejected.reason = reason
+                existing_rejected.status = new_status
+                existing_rejected.save()
+                serializer = LeaveSerializer(existing_rejected)
+                message = 'Leave applied successfully!' if new_status == 'approved' else 'Leave request submitted for approval!'
+                return Response({
+                    'message': message,
+                    'leaves': [serializer.data]
+                }, status=status.HTTP_200_OK)  
+            else:
                 leave = Leave.objects.create(
                     user=request.user,
                     leave_type=leave_type,
                     reason=reason,
-                    date=current_date
+                    date=leave_date,
+                    status=new_status
                 )
-                created_leaves.append(leave)
-                current_date += timedelta(days=1)
-            
-            serializer = LeaveSerializer(created_leaves, many=True)
-            return Response({
-                'message': f'{len(created_leaves)} leave days applied successfully',
-                'leaves': serializer.data}, status=status.HTTP_201_CREATED)       
-        else:
-            return Response({'error': 'Please provide either a single date or from_date and to_date'},status=status.HTTP_400_BAD_REQUEST)
+                serializer = LeaveSerializer(leave)
+                message = 'Leave applied successfully!' if new_status == 'approved' else 'Leave request submitted for approval!'
+                return Response({
+                    'message': message,
+                    'leaves': [serializer.data]
+                }, status=status.HTTP_201_CREATED)
 
+        elif from_date and to_date:
+            if from_date > to_date:
+                return Response({'error': 'From date must be before or equal to To date'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            from_date_obj = parse_date(from_date)
+            to_date_obj = parse_date(to_date)
+            if not from_date_obj or not to_date_obj:
+                return Response({'error': 'Invalid date format'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            pending_approved = Leave.objects.filter(
+                user=request.user,
+                date__range=[from_date, to_date],
+                status__in=['pending', 'approved']
+            ).exists()
+            if pending_approved:
+                return Response({'error': 'You already have a pending or approved leave for some date in this range.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            wfh_in_range = WorkFromHome.objects.filter(
+                user=request.user,
+                from_date__lte=to_date,
+                to_date__gte=from_date
+            ).exists()
+            if wfh_in_range:
+                return Response({'error': 'Cannot apply leave - This date range overlaps with your Work From Home period!'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            attendance_in_range = Attendance.objects.filter(
+                user=request.user,
+                date__range=[from_date, to_date]
+            ).exists()
+            if attendance_in_range:
+                return Response({'error': 'Cannot apply leave - You have marked attendance for some dates in this range!'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            created_or_updated = []
+            current_date = from_date_obj
+            while current_date <= to_date_obj:
+                new_status = 'approved' if current_date <= today else 'pending'
+
+                existing_rejected = Leave.objects.filter(user=request.user, date=current_date, status='rejected').first()
+                if existing_rejected:
+                    existing_rejected.leave_type = leave_type
+                    existing_rejected.reason = reason
+                    existing_rejected.status = new_status
+                    existing_rejected.save()
+                    created_or_updated.append(existing_rejected)
+                else:
+                    leave = Leave.objects.create(
+                        user=request.user,
+                        leave_type=leave_type,
+                        reason=reason,
+                        date=current_date,
+                        status=new_status
+                    )
+                    created_or_updated.append(leave)
+                current_date += timedelta(days=1)
+
+            serializer = LeaveSerializer(created_or_updated, many=True)
+            pending_count = sum(1 for l in created_or_updated if l.status == 'pending')
+            approved_count = len(created_or_updated) - pending_count
+            message = f'{approved_count} leave(s) for past dates applied, {pending_count} future leave request(s) submitted for approval.'
+            return Response({
+                'message': message,
+                'leaves': serializer.data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({'error': 'Please provide either a single date or from_date and to_date'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_users_api(request):
     if not request.user.is_superuser:
-        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)    
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
     users = User.objects.all()
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_leave_requests(request):
+    """List all pending leave requests for admin"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    leaves = Leave.objects.filter(status='pending').select_related('user').order_by('date')
+    serializer = LeaveSerializer(leaves, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_leave_action(request, leave_id):
+    """Approve or reject a leave request"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        leave = Leave.objects.get(id=leave_id)
+    except Leave.DoesNotExist:
+        return Response({'error': 'Leave request not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    action = request.data.get('action')  
+    remarks = request.data.get('remarks', '')
+
+    if action == 'approve':
+        if Attendance.objects.filter(user=leave.user, date=leave.date).exists():
+            return Response({'error': f'Cannot approve: user already marked attendance on {leave.date}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if WorkFromHome.objects.filter(
+            user=leave.user,
+            from_date__lte=leave.date,
+            to_date__gte=leave.date
+        ).exists():
+            return Response({'error': f'Cannot approve: user has WFH on {leave.date}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        leave.status = 'approved'
+        message = 'Leave request approved'
+    elif action == 'reject':
+        leave.status = 'rejected'
+        message = 'Leave request rejected'
+    else:
+        return Response({'error': 'Invalid action. Use "approve" or "reject".'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if remarks:
+        leave.admin_remarks = remarks
+    leave.save()
+    serializer = LeaveSerializer(leave)
+    return Response({'message': message, 'leave': serializer.data})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_create_user(request):
+    """Create a new user (admin only)"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    
+    username = request.data.get('username')
+    password = request.data.get('password')
+    email = request.data.get('email', '')
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    is_staff = request.data.get('is_staff', False)
+    
+    if not username or not password:
+        return Response({'error': 'Username and password are required'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already exists'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        is_staff=is_staff
+    )
+    
+    return Response({
+        'message': 'User created successfully',
+        'user': UserSerializer(user).data
+    }, status=status.HTTP_201_CREATED)
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_all_users_with_activity(request):
+    """Get all users with their activity counts (admin only)"""
+    if not request.user.is_superuser:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    
+    users = User.objects.all().order_by('username')  # Alphabetical order
+    
+    user_data = []
+    for user_obj in users:
+        user_data.append({
+            'id': user_obj.id,
+            'username': user_obj.username,
+            'email': user_obj.email,
+            'first_name': user_obj.first_name,
+            'last_name': user_obj.last_name,
+            'is_staff': user_obj.is_staff,
+            'last_login': user_obj.last_login.strftime('%Y-%m-%d %H:%M:%S') if user_obj.last_login else 'Never logged in',
+            'stats': {
+                'total_attendance': Attendance.objects.filter(user=user_obj).count(),
+                'total_leave': Leave.objects.filter(user=user_obj).count(),
+                'pending_leave': Leave.objects.filter(user=user_obj, status='pending').count(),
+                'total_wfh': WorkFromHome.objects.filter(user=user_obj).count(),
+            }
+        })
+    
+    return Response(user_data)

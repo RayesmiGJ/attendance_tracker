@@ -56,6 +56,20 @@ function ViewAttendance({ user }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const formatDateTime = (dateTimeStr) => {
+    if (!dateTimeStr) return 'N/A';
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
   const getStatusClass = (status) => {
     switch(status) {
       case 'Present': return styles.present;
@@ -108,34 +122,37 @@ function ViewAttendance({ user }) {
             {records.length === 0 ? (
               <div style={styles.noRecords}>No records found</div>
             ) : (
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record, index) => (
-                    <tr key={index} style={styles.tr}>
-                      <td style={styles.td}>{formatDate(record.date)}</td>
-                      <td style={{...styles.td, ...getStatusClass(record.status)}}>
-                        {record.status === 'Present' && '✓ '}
-                        {record.status === 'Leave' && '✗ '}
-                        {record.status === 'WFH' }
-                        {record.status}
-                      </td>
-                      <td style={styles.td}>{record.details}</td>
+              <div style={styles.tableWrapper}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Date</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Details</th>
+                      <th style={styles.th}>Applied On</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {records.map((record, index) => (
+                      <tr key={index} style={styles.tr}>
+                        <td style={styles.td}>{formatDate(record.date)}</td>
+                        <td style={{...styles.td, ...getStatusClass(record.status)}}>
+                          {record.status === 'Present' && '✓ '}
+                          {record.status === 'Leave' && '✗ '}
+                          {record.status}
+                        </td>
+                        <td style={styles.td}>{record.details}</td>
+                        <td style={styles.td}>{formatDateTime(record.applied_on)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
         
-        <button onClick={handleBack} style={styles.backButton}>← Back</button>
+        <button onClick={handleBack} style={styles.backButton}>Back to Dashboard</button>
       </div>
     </div>
   );
@@ -147,7 +164,7 @@ const styles = {
     minHeight: '100vh',
   },
   content: {
-    maxWidth: '900px',
+    maxWidth: '1100px', 
     margin: '0 auto',
     background: 'white',
     padding: '30px',
@@ -227,12 +244,16 @@ const styles = {
     fontSize: '16px',
     fontFamily: 'Times New Roman, Times, serif',
   },
+  tableWrapper: {
+    overflowX: 'auto',
+    marginBottom: '25px',
+  },
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-    marginBottom: '25px',
     borderRadius: '10px',
     overflow: 'hidden',
+    minWidth: '800px', 
   },
   th: {
     backgroundColor: 'var(--moss-green)',

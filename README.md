@@ -1,27 +1,34 @@
-# Attendance Tracker
+# Attendance Tracker - Complete Setup Guide:
+A Django-based attendance tracking system with REST API.
+# Clone the Repository:
+   - git clone https://github.com/RayesmiGJ/attendance_tracker.git
+   - cd attendance_tracker
+# Create Virtual Environment for Windows:
+   - python -m venv .venv
+   - .venv\Scripts\activate.bat
+# Install Dependencies:
+   - pip install -r requirements.txt
+               (or)
+   - pip install django
+   - pip install djangorestframework 
+   - pip install django-cors-headers 
+# Run migrations:
+   - python manage.py makemigrations
+   - python manage.py migrate
+   - python manage.py showmigrations 
+# Create Admin User
+   - python manage.py createsuperuser
+     Follow prompts to enter:
+      ->Username
+      ->Email
+      ->Password
+# Start the server
+   - python manage.py runserver
+# Access the Application
+   - Admin Panel: http://127.0.0.1:8000/admin
+   *Login in it and create users*
+# Install and Start the npm in an other terminal:
+   npm install
+   npm start
 
-## Overview
-
-A web-based attendance management system designed to streamline and automate attendance tracking. The application focuses on improving accuracy, reducing manual effort, and providing real-time access to attendance data.
-
-## Features
-
-* User authentication and role-based access
-* Attendance marking and tracking
-* Real-time data updates
-* Structured data management for efficient retrieval
-
-## Tech Stack
-
-* Backend: Django
-* Frontend: HTML, CSS, JavaScript
-* Database: SQLite
-
-## Architecture
-
-The system follows a server-side rendering approach using Django, where user requests are processed on the backend and dynamically rendered to the frontend. Data is managed through a relational database and updated in real time to ensure consistency.
-
-## Note
-
-The full implementation of this project is maintained separately due to project constraints. This repository provides an overview of the system design and functionality.
 
